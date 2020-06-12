@@ -105,3 +105,6 @@ venv.bak/
 
 # Visual Studio
 *.suo
+/.vs/VSWorkspaceState.json
+/.vs/slnx.sqlite
+/.vs/ProjectSettings.json

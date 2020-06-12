@@ -20,6 +20,7 @@ import Datenbank
 from Wolke import Wolke
 import os.path
 import pdfMeister as pdfM
+import roll20Exporter as roll20Exp
 import logging
 
 class Editor(object):
@@ -31,6 +32,7 @@ class Editor(object):
         super().__init__()
         Wolke.DB = Datenbank.Datenbank()
         self.pdfMeister = pdfM.pdfMeister()
+        self.roll20Exporter = roll20Exp.roll20Exporter()
         self.savepath = CharacterName
         self.changed = False
         self.savePathUpdatedCallback = savePathUpdatedCallback
@@ -85,6 +87,7 @@ class Editor(object):
         self.ui.buttonSave.clicked.connect(self.saveButton)
         self.ui.buttonQuicksave.clicked.connect(self.quicksaveButton)
         self.ui.buttonSavePDF.clicked.connect(self.pdfButton)
+        self.ui.buttonExportRoll20.clicked.connect(self.roll20ExportButton)
         self.ui.spinEP.valueChanged.connect(self.epChanged)
         self.ui.checkReq.stateChanged.connect(self.reqChanged)
         
@@ -280,6 +283,40 @@ Fehlermeldung: " + Wolke.ErrorCode[Wolke.Fehlercode] + "\n")
 Fehlercode: " + str(Wolke.Fehlercode) + "\n\
 Fehlermeldung: " + Wolke.ErrorCode[Wolke.Fehlercode] + "\n")
             infoBox.setWindowTitle("PDF-Erstellung fehlgeschlagen.")
+            infoBox.setStandardButtons(QtWidgets.QMessageBox.Ok)
+            infoBox.setEscapeButton(QtWidgets.QMessageBox.Close)  
+            infoBox.exec_()
+
+    def roll20ExportButton(self):
+        self.updateAll()
+        
+        result = -1
+
+        if os.path.isdir(Wolke.Settings['Pfad-Chars']):
+            startDir = Wolke.Settings['Pfad-Chars']
+        else:
+            startDir = ""
+            
+        # Let the user choose a saving location and name
+        saveFileDialog = QtWidgets.QFileDialog(None, "Roll20-Charakterbogen aktualisieren...", startDir, "JSON-Datei (*.json)")
+        saveFileDialog.setFileMode(QtWidgets.QFileDialog.ExistingFile)
+        spath = ""
+        if saveFileDialog.exec_():
+            spath = saveFileDialog.selectedFiles()[0]
+        if spath == "":
+            return
+            
+        try:
+            self.roll20Exporter.exportCharacter(spath)
+        except Exception as e:
+            logging.error("Sephrasto Fehlercode " + str(Wolke.Fehlercode) + ". Exception: " + str(e))
+            infoBox = QtWidgets.QMessageBox()
+            infoBox.setIcon(QtWidgets.QMessageBox.Information)
+            infoBox.setText("JSON-Aktualisierung fehlgeschlagen!")
+            infoBox.setInformativeText("Beim Aktualisieren des Charakterbogens ist ein Fehler aufgetreten.\n\
+Fehlercode: " + str(Wolke.Fehlercode) + "\n\
+Fehlermeldung: " + Wolke.ErrorCode[Wolke.Fehlercode] + "\n")
+            infoBox.setWindowTitle("JSON-Aktualisierung fehlgeschlagen.")
             infoBox.setStandardButtons(QtWidgets.QMessageBox.Ok)
             infoBox.setEscapeButton(QtWidgets.QMessageBox.Close)  
             infoBox.exec_()
