@@ -66,6 +66,7 @@ class roll20Exporter(object):
             self.setMaxAttrValue(attribs, "energy", char.asp.wert + char.aspBasis + char.aspMod)
         elif isGeweiht:
             self.setMaxAttrValue(attribs, "energy", char.kap.wert + char.kapBasis + char.kapMod)
+        self.setMaxAttrValue(attribs, "schip", char.schipsMax)
 
 
     def updateFertigkeit(self, attribs, attrName, fert, char):
