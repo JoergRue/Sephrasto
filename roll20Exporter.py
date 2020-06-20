@@ -20,6 +20,7 @@ import sys
 import json
 import time
 import random
+import re
 
 
 class roll20Exporter(object):
@@ -120,15 +121,15 @@ class roll20Exporter(object):
                 self.updateFertigkeit(attribs, "geb", fert, char)
 
         # Freie Fertigkeiten
-        ffertcount = 1
+        fferts = []
         for fert in char.freieFertigkeiten:
             if fert.wert < 1 or fert.wert > 3 or not fert.name:
                 continue
             val = fert.name + " "
             for i in range(fert.wert):
                 val += "I"
-            self.setCurrentAttrValue(attribs, "ffert" + str(ffertcount), val)
-            ffertcount += 1
+            fferts.append(val)
+        self.setRepeatingAttrValues(attribs, "freiefertigkeiten", "ffert", fferts)
 
     def updateUebernatuerliches(self, attribs, char):
         # code taken from pdfMeister, pdfSechsterBlock (pull out function?)
@@ -225,6 +226,20 @@ class roll20Exporter(object):
             attr = { "name": name, "current": str(value), "max": str(value), "id": self.generateAttrId() }
             attribs.append(attr)
 
+    def setRepeatingAttrValues(self, attribs, basenamePattern1, basenamePattern2, values):
+        existingList = []
+        pattern = re.compile('^'+ "repeating_" + basenamePattern1 + "_([-_\\d\\w])+_" + basenamePattern2 + '$')
+        for attr in attribs:
+            if pattern.match(attr["name"]) != None:
+                existingList.append(attr["name"])
+        for value in values:
+            attrName = ""
+            if len(existingList) > 0:
+                attrName = existingList.pop()
+            else:
+                attrName = "repeating_"+ basenamePattern1  + "_" + self.generateRepeatingAttrId() + "_" + basenamePattern2
+            self.setCurrentAttrValue(attribs, attrName, value)
+
     def generateAttrId(self):
         # see https://app.roll20.net/forum/permalink/4258551/
         millis = int(round(time.time() * 1000))
@@ -236,3 +251,7 @@ class roll20Exporter(object):
         for f in range(0, 12):
             id += base64string[random.randrange(0, len(base64string))]
         return id
+
+    def generateRepeatingAttrId(self):
+        id = self.generateAttrId()
+        return id.replace("_", "-")
