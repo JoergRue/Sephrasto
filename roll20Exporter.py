@@ -60,6 +60,13 @@ class roll20Exporter(object):
         self.setCurrentAttrValue(attribs, "behinderung", char.be)
         self.setCurrentAttrValue(attribs, "geschwindigkeit", char.gs)
         self.setCurrentAttrValue(attribs, "kampfreflexe", 4 if "Kampfreflexe" in char.vorteile else 0)
+        isZauberer = char.aspBasis + char.aspMod > 0
+        isGeweiht = char.kapBasis + char.kapMod > 0
+        if isZauberer:
+            self.setMaxAttrValue(attribs, "energy", char.asp.wert + char.aspBasis + char.aspMod)
+        elif isGeweiht:
+            self.setMaxAttrValue(attribs, "energy", char.kap.wert + char.kapBasis + char.kapMod)
+
 
     def updateFertigkeit(self, attribs, attrName, fert, char):
         self.setCurrentAttrValue(attribs, attrName, fert.wert)
@@ -199,6 +206,15 @@ class roll20Exporter(object):
                 break
         else:
             attr = { "name": name, "current": str(value), "max": "", "id": self.generateAttrId() }
+            attribs.append(attr)
+
+    def setMaxAttrValue(self, attribs, name, value):
+        for attr in attribs:
+            if "name" in attr and attr["name"] == name:
+                attr["max"] = str(value)
+                break
+        else:
+            attr = { "name": name, "current": str(value), "max": str(value), "id": self.generateAttrId() }
             attribs.append(attr)
 
     def generateAttrId(self):
