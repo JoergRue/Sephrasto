@@ -48,6 +48,7 @@ class roll20Exporter(object):
         self.updateFertigkeiten(attribs, char)
         self.updateUebernatuerliches(attribs, char)
         self.updateWaffen(attribs, char)
+        self.updateRuestung(attribs, char)
 
     def updateAttributes(self, attribs, char):
         for key in Definitionen.Attribute:
@@ -199,6 +200,12 @@ class roll20Exporter(object):
                 self.setCurrentAttrValue(attribs, "kl" + base, kl)
                 nkWeaponCount += 1
             weaponCount += 1
+
+    def updateRuestung(self, attribs, char):
+        if len(char.rüstung) > 0:
+            el = char.rüstung[0]
+            for zone in range(1, 7):
+                self.setCurrentAttrValue(attribs, "wsg" + str(zone), el.rs[zone-1] + char.rsmod + char.ws)
 
     def setCurrentAttrValue(self, attribs, name, value):
         for attr in attribs:
