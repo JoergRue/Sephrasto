@@ -61,6 +61,28 @@ class roll20Exporter(object):
         self.setCurrentAttrValue(attribs, "geschwindigkeit", char.gs)
         self.setCurrentAttrValue(attribs, "kampfreflexe", 4 if "Kampfreflexe" in char.vorteile else 0)
 
+    def updateFertigkeit(self, attribs, attrName, fert, char):
+        self.setCurrentAttrValue(attribs, attrName, fert.wert)
+        # Talente
+        talStr = ""
+        talente = sorted(fert.gekaufteTalente)
+        for el2 in talente:
+            if (len(talStr) > 0):
+                talStr += ", "
+            # code taken from pdfMeister, purpose not clear
+            if el2.startswith("Gebräuche: "):
+                talStr += el2[11:]
+            elif el2.startswith("Mythen: "):
+                talStr += el2[8:]
+            elif el2.startswith("Überleben: "):
+                talStr += el2[11:]
+            else:
+                talStr += el2
+            if el2 in char.talenteVariable:
+                vk = char.talenteVariable[el2]
+                talStr += " (" + vk.kommentar + ")"
+        self.setCurrentAttrValue(attribs, attrName + "_t", talStr)
+
     def updateFertigkeiten(self, attribs, char):
         attrNames = {
             "Athletik": "ath",
@@ -84,26 +106,9 @@ class roll20Exporter(object):
             assert fert in Definitionen.StandardFerts
         for fertKey, fert in char.fertigkeiten.items():
             if fert.name in attrNames:
-                self.setCurrentAttrValue(attribs, attrNames[fert.name], fert.wert)
-                # Talente
-                talStr = ""
-                talente = sorted(fert.gekaufteTalente)
-                for el2 in talente:
-                    if (len(talStr) > 0):
-                        talStr += ", "
-                    # code taken from pdfMeister, purpose not clear
-                    if el2.startswith("Gebräuche: "):
-                        talStr += el2[11:]
-                    elif el2.startswith("Mythen: "):
-                        talStr += el2[8:]
-                    elif el2.startswith("Überleben: "):
-                        talStr += el2[11:]
-                    else:
-                        talStr += el2
-                    if el2 in Wolke.Char.talenteVariable:
-                        vk = Wolke.Char.talenteVariable[el2]
-                        talStr += " (" + vk.kommentar + ")"
-                self.setCurrentAttrValue(attribs, attrNames[fert.name] + "_t", talStr)
+                self.updateFertigkeit(attribs, attrNames[fert.name], fert, char)
+            elif fert.name == "Gebräuche und Sitten": # special to replace Gebräuche
+                self.updateFertigkeit(attribs, "geb", fert, char)
 
         # Freie Fertigkeiten
         ffertcount = 1
