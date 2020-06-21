@@ -70,10 +70,7 @@ class roll20Exporter(object):
             self.setMaxAttrValue(attribs, "energy", char.kap.wert + char.kapBasis + char.kapMod)
         self.setMaxAttrValue(attribs, "schip", char.schipsMax)
 
-
-    def updateFertigkeit(self, attribs, attrName, fert, char):
-        self.setCurrentAttrValue(attribs, attrName, fert.wert)
-        # Talente
+    def getTalents(self, fert, char):
         talStr = ""
         talente = sorted(fert.gekaufteTalente)
         for el2 in talente:
@@ -91,7 +88,12 @@ class roll20Exporter(object):
             if el2 in char.talenteVariable:
                 vk = char.talenteVariable[el2]
                 talStr += " (" + vk.kommentar + ")"
-        self.setCurrentAttrValue(attribs, attrName + "_t", talStr)
+        return talStr
+
+    def updateFertigkeit(self, attribs, attrName, fert, char):
+        self.setCurrentAttrValue(attribs, attrName, fert.wert)
+        # Talente
+        self.setCurrentAttrValue(attribs, attrName + "_t", self.getTalents(fert, char))
 
     def updateFertigkeiten(self, attribs, char):
         attrNames = {
@@ -114,11 +116,23 @@ class roll20Exporter(object):
         assert len(attrNames) == len(Definitionen.StandardFerts) - 6 # nicht Kampffertigkeiten
         for fert in attrNames.keys():
             assert fert in Definitionen.StandardFerts
+        additionalFerts = []
         for fertKey, fert in char.fertigkeiten.items():
             if fert.name in attrNames:
                 self.updateFertigkeit(attribs, attrNames[fert.name], fert, char)
-            elif fert.name == "Gebräuche und Sitten": # special to replace Gebräuche
+            elif fert.name.startswith("Gebräuche"): # special to replace Gebräuche
                 self.updateFertigkeit(attribs, "geb", fert, char)
+            elif fert.kampffertigkeit == 0:
+                values = []
+                values.append(fert.name)
+                values.append(self.getTalents(fert, char))
+                for attr in fert.attribute:
+                    values.append("@{" + attr.lower() + "}")
+                values.append(fert.wert)
+                additionalFerts.append(values)
+        if len(additionalFerts) > 0:
+            appendices = ["_name", "_t", "_att1", "_att2", "_att3", "_fw"]
+            self.setRepeatingAttrValuesEx(attribs, "zfertigkeiten", "zfertigkeit", appendices, additionalFerts)
 
         # Freie Fertigkeiten
         fferts = []
@@ -173,17 +187,41 @@ class roll20Exporter(object):
             self.setCurrentAttrValue(attribs, "sn" + str(talCount) + "_t", tal + mod)
             talCount += 1
 
+    def ignoreBE(self, weapon, char):
+        fertigkeit = ""
+        talent = ""
+        if weapon.name in Wolke.DB.waffen:
+            fertigkeit = Wolke.DB.waffen[weapon.name].fertigkeit
+            talent = Wolke.DB.waffen[weapon.name].talent
+        if not fertigkeit in char.fertigkeiten:
+            return False
+        kampfstilMods = KampfstilMod()
+        if weapon.kampfstil in char.kampfstilMods:
+            kampfstilMods = char.kampfstilMods[weapon.kampfstil]
+        for values in kampfstilMods.BEIgnore:
+            if values[0] == fertigkeit and values[1] == talent:
+                return True
+        return False
+
     def updateWaffen(self, attribs, char):
         weaponCount = 1
         nkWeaponCount = 1
         fkWeaponCount = 1
         for weapon in char.waffen:
             waffenwerte = char.waffenwerte[weaponCount - 1]
+            # the values given from the char include modification by BE
+            # the character sheet expects the values without the modification and adds the modification itself
+            beMod = char.be
+            # the character sheet doesn't know the kampfstil, so it is probably wrong for the case that the
+            # kampfstil ignores the BE. So in that case, let's _add_ the be to the values a second time, then
+            # the value is correct again after the sheet removes the BE
+            if self.ignoreBE(weapon, char):
+                beMod = self.be
             if type(weapon) == Objekte.Fernkampfwaffe or (weapon.name in Wolke.DB.waffen and Wolke.DB.waffen[weapon.name].talent == 'Lanzenreiten'):
                 base = "fkw" + str(fkWeaponCount)
                 self.setCurrentAttrValue(attribs, base + "_dmd", weapon.W6)
                 self.setCurrentAttrValue(attribs, base + "_dmn", weapon.plus)
-                self.setCurrentAttrValue(attribs, base + "_at", waffenwerte.AT)
+                self.setCurrentAttrValue(attribs, base + "_at", waffenwerte.AT + beMod)
                 self.setCurrentAttrValue(attribs, base + "_t", weapon.anzeigename)
                 fkWeaponCount += 1
             else:
@@ -193,9 +231,9 @@ class roll20Exporter(object):
                 # weapon.plus is without both
                 # waffenwerte.TPPlus is including kampfstil and including damage bonus
                 self.setCurrentAttrValue(attribs, base + "_dmn", waffenwerte.TPPlus - char.schadensbonus)
-                # character sheet expects at including kampfstil / be, waffenwerte.AT is correct
-                self.setCurrentAttrValue(attribs, base + "_at", waffenwerte.AT)
-                self.setCurrentAttrValue(attribs, base + "_vt", waffenwerte.VT)
+                # character sheet expects at including kampfstil, waffenwerte.AT is correct except for BE
+                self.setCurrentAttrValue(attribs, base + "_at", waffenwerte.AT + beMod)
+                self.setCurrentAttrValue(attribs, base + "_vt", waffenwerte.VT + beMod)
                 self.setCurrentAttrValue(attribs, base + "_t", weapon.anzeigename)
                 kl = 1 if "Kopflastig" in weapon.eigenschaften else 0
                 self.setCurrentAttrValue(attribs, "kl" + base, kl)
@@ -227,18 +265,37 @@ class roll20Exporter(object):
             attribs.append(attr)
 
     def setRepeatingAttrValues(self, attribs, basenamePattern1, basenamePattern2, values):
-        existingList = []
-        pattern = re.compile('^'+ "repeating_" + basenamePattern1 + "_([-_\\d\\w])+_" + basenamePattern2 + '$')
-        for attr in attribs:
-            if pattern.match(attr["name"]) != None:
-                existingList.append(attr["name"])
+        valueList = []
         for value in values:
+            valueList.append([value])
+        appendices = [""]
+        self.setRepeatingAttrValuesEx(attribs, basenamePattern1, basenamePattern2, appendices, valueList)
+
+    def setRepeatingAttrValuesEx(self, attribs, basenamePattern1, basenamePattern2, appendices, valueList):
+        existingList = []
+        # first find all existing lines
+        # the lines all start with "repeating", then the first name, then an ID which is unique for the line,
+        # then the second name, finally an appendix if the line contains several fields.
+        # all the parts are separated by "_", which therefore must not occur in the ID
+        pattern = re.compile('^'+ "repeating_" + basenamePattern1 + "_([-_\\d\\w])+_" + basenamePattern2)
+        for attr in attribs:
+            match = pattern.match(attr["name"])
+            if match != None:
+                existingName = match[0]
+                if not existingName in existingList: 
+                    existingList.append(existingName)
+        # now replace or add the values
+        # the valueList contains for each line one value per appendix
+        for values in valueList:
             attrName = ""
             if len(existingList) > 0:
                 attrName = existingList.pop()
             else:
                 attrName = "repeating_"+ basenamePattern1  + "_" + self.generateRepeatingAttrId() + "_" + basenamePattern2
-            self.setCurrentAttrValue(attribs, attrName, value)
+            valueIndex = 0
+            for appendix in appendices:
+                self.setCurrentAttrValue(attribs, attrName + appendix, values[valueIndex])
+                valueIndex += 1
 
     def generateAttrId(self):
         # see https://app.roll20.net/forum/permalink/4258551/
